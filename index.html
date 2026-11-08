@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 
 <html lang="en">
-
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <head>
 
 <meta charset="UTF-8">
@@ -188,17 +188,191 @@ button {
 
 <script>
 
+const SUPABASE_URL = "https://phrskzefdwmkzlhfqlfj.supabase.co";
+
+const SUPABASE_ANON_KEY = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBocnNremVmZHdta3psaGZxbGZqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTQwODU1OTEsImV4cCI6MjEwOTY2MTU5MX0.0YGjakY7mdk-e7an89yk09UdcbEMsOuq6e4i6O7CnfU;
+
+const db = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let currentUser = null;
+
 let savedRecipes = [];
 
-function saveRecipe() {
+const authBar = document.createElement("div");
+
+authBar.className = "panel";
+
+authBar.innerHTML = `
+
+  <h2 id="accountStatus">Recipe Catcher Account</h2>
+
+  <button id="loginButton">Sign in</button>
+
+  <button id="registerButton">Create account</button>
+
+  <button id="logoutButton" style="display:none">Sign out</button>
+
+  <p id="accountMessage"></p>
+
+`;
+
+document.querySelector("main").prepend(authBar);
+
+const accountMessage = document.getElementById("accountMessage");
+
+const accountStatus = document.getElementById("accountStatus");
+
+function message(text) {
+
+  document.getElementById("message").textContent = text;
+
+}
+
+async function signIn() {
+
+  const email = prompt("Enter your email address:");
+
+  if (!email) return;
+
+  const password = prompt("Enter your password:");
+
+  if (!password) return;
+
+  const { data, error } = await db.auth.signInWithPassword({
+
+    email, password
+
+  });
+
+  if (error) {
+
+    accountMessage.textContent = error.message;
+
+    return;
+
+  }
+
+  currentUser = data.user;
+
+  await startApp();
+
+}
+
+async function register() {
+
+  const email = prompt("Enter your email address:");
+
+  if (!email) return;
+
+  const password = prompt("Create a password (at least 6 characters):");
+
+  if (!password) return;
+
+  const { data, error } = await db.auth.signUp({
+
+    email, password
+
+  });
+
+  if (error) {
+
+    accountMessage.textContent = error.message;
+
+    return;
+
+  }
+
+  if (data.session) {
+
+    currentUser = data.user;
+
+    await startApp();
+
+  } else {
+
+    accountMessage.textContent =
+
+      "Account created! Check your email to confirm, then sign in.";
+
+  }
+
+}
+
+async function logout() {
+
+  await db.auth.signOut();
+
+  currentUser = null;
+
+  savedRecipes = [];
+
+  accountStatus.textContent = "Recipe Catcher Account";
+
+  document.getElementById("loginButton").style.display = "";
+
+  document.getElementById("registerButton").style.display = "";
+
+  document.getElementById("logoutButton").style.display = "none";
+
+  accountMessage.textContent = "You are signed out.";
+
+  renderRecipes();
+
+}
+
+async function startApp() {
+
+  accountStatus.textContent = "My Recipe Catcher Account";
+
+  document.getElementById("loginButton").style.display = "none";
+
+  document.getElementById("registerButton").style.display = "none";
+
+  document.getElementById("logoutButton").style.display = "";
+
+  accountMessage.textContent = "Signed in successfully!";
+
+  await loadRecipes();
+
+}
+
+async function loadRecipes() {
+
+  const { data, error } = await db.from("recipes")
+
+    .select("*")
+
+    .order("created_at", { ascending: false });
+
+  if (error) {
+
+    accountMessage.textContent = "Couldn't load recipes: " + error.message;
+
+    return;
+
+  }
+
+  savedRecipes = data || [];
+
+  renderRecipes();
+
+}
+
+async function saveRecipe() {
+
+  if (!currentUser) {
+
+    message("Please sign in before saving recipes.");
+
+    return;
+
+  }
 
   const title = document.getElementById("title").value.trim();
 
   if (!title) {
 
-    document.getElementById("message").textContent =
-
-      "Please enter a recipe name.";
+    message("Please enter a recipe name.");
 
     return;
 
@@ -206,132 +380,263 @@ function saveRecipe() {
 
   const recipe = {
 
+    user_id: currentUser.id,
+
     title,
 
     category: document.getElementById("category").value,
 
-    prep: document.getElementById("prep").value,
+    prep_time: parseInt(document.getElementById("prep").value) || null,
 
-    cook: document.getElementById("cook").value,
+    cook_time: parseInt(document.getElementById("cook").value) || null,
 
     servings: document.getElementById("servings").value,
 
     temperature: document.getElementById("temperature").value,
 
-    ingredients: document.getElementById("ingredients").value,
+    ingredients: document.getElementById("ingredients").value
 
-    instructions: document.getElementById("instructions").value,
+      .split("\n").map(x => x.trim()).filter(Boolean),
 
-    source: document.getElementById("source").value,
+    instructions: document.getElementById("instructions").value
 
-    favorite: false
+      .split("\n").map(x => x.trim()).filter(Boolean),
+
+    source_url: document.getElementById("source").value.trim()
 
   };
 
-  savedRecipes.push(recipe);
+  const { error } = await db.from("recipes").insert(recipe);
 
-  localStorage.setItem("recipeCatcher", JSON.stringify(savedRecipes));
+  if (error) {
 
-  document.getElementById("message").textContent = "Recipe saved!";
+    message("Couldn't save: " + error.message);
+
+    return;
+
+  }
+
+  message("Recipe saved to your cloud recipe box!");
 
   document.querySelectorAll("input, textarea").forEach(el => el.value = "");
 
-  showRecipes();
+  await loadRecipes();
 
 }
 
-function showRecipes() {
+function renderRecipes() {
 
   const list = document.getElementById("recipes");
 
-  const search = document.getElementById("search").value.toLowerCase();
+  const search = (document.getElementById("search")?.value || "").toLowerCase();
 
-  list.innerHTML = "";
+  list.replaceChildren();
 
-  savedRecipes
+  const matches = savedRecipes.filter(r => {
 
-    .filter(r =>
+    const ingredients = Array.isArray(r.ingredients)
 
-      (r.title + " " + r.ingredients).toLowerCase().includes(search)
+      ? r.ingredients.join(" ")
 
-    )
+      : "";
 
-    .forEach((r, index) => {
+    return (r.title + " " + ingredients).toLowerCase().includes(search);
 
-      const card = document.createElement("div");
+  });
 
-      card.className = "recipe";
+  if (!currentUser) {
 
-      const heading = document.createElement("h3");
+    list.textContent = "Sign in to see your saved recipes.";
 
-      heading.textContent = r.title;
+    return;
 
-      card.appendChild(heading);
+  }
 
-      const details = document.createElement("p");
+  if (!matches.length) {
 
-      details.textContent = r.category +
+    list.textContent = "No recipes found. Add your first recipe!";
 
-        " | Prep: " + r.prep +
+    return;
 
-        " | Cook: " + r.cook;
+  }
 
-      card.appendChild(details);
+  matches.forEach(r => {
 
-      const ingredients = document.createElement("p");
+    const card = document.createElement("div");
 
-      ingredients.textContent = "Ingredients:\n" + r.ingredients;
+    card.className = "recipe";
 
-      card.appendChild(ingredients);
+    const heading = document.createElement("h3");
 
-      const instructions = document.createElement("p");
+    heading.textContent = r.title;
 
-      instructions.textContent = "Instructions:\n" + r.instructions;
+    card.appendChild(heading);
 
-      card.appendChild(instructions);
+    const details = document.createElement("p");
 
-      const favorite = document.createElement("button");
+    details.textContent =
 
-      favorite.textContent = r.favorite ? "♥ Favorite" : "♡ Favorite";
+      r.category + " | Prep: " + (r.prep_time || "—") +
 
-      favorite.onclick = () => {
+      " min | Cook: " + (r.cook_time || "—") + " min";
 
-        r.favorite = !r.favorite;
+    card.appendChild(details);
 
-        localStorage.setItem("recipeCatcher", JSON.stringify(savedRecipes));
+    const ingredients = document.createElement("p");
 
-        showRecipes();
+    ingredients.textContent = "Ingredients:\n" +
 
-      };
+      (Array.isArray(r.ingredients) ? r.ingredients.join("\n") : "");
 
-      card.appendChild(favorite);
+    card.appendChild(ingredients);
 
-      const remove = document.createElement("button");
+    const instructions = document.createElement("p");
 
-      remove.textContent = "Delete";
+    instructions.textContent = "Instructions:\n" +
 
-      remove.onclick = () => {
+      (Array.isArray(r.instructions) ? r.instructions.join("\n") : "");
 
-        savedRecipes.splice(index, 1);
+    card.appendChild(instructions);
 
-        localStorage.setItem("recipeCatcher", JSON.stringify(savedRecipes));
+    if (r.servings) {
 
-        showRecipes();
+      const servings = document.createElement("p");
 
-      };
+      servings.textContent = "Servings: " + r.servings;
 
-      card.appendChild(remove);
+      card.appendChild(servings);
 
-      list.appendChild(card);
+    }
 
-    });
+    if (r.temperature) {
+
+      const temp = document.createElement("p");
+
+      temp.textContent = "Temperature: " + r.temperature;
+
+      card.appendChild(temp);
+
+    }
+
+    if (r.source_url) {
+
+      const link = document.createElement("a");
+
+      link.href = r.source_url;
+
+      link.target = "_blank";
+
+      link.rel = "noopener noreferrer";
+
+      link.textContent = "Original recipe";
+
+      card.appendChild(link);
+
+    }
+
+    const favorite = document.createElement("button");
+
+    favorite.textContent = r.is_favorite ? "♥ Favorite" : "♡ Favorite";
+
+    favorite.onclick = () => toggleFavorite(r);
+
+    card.appendChild(favorite);
+
+    const remove = document.createElement("button");
+
+    remove.textContent = "Delete";
+
+    remove.style.marginLeft = "8px";
+
+    remove.onclick = () => deleteRecipe(r.id);
+
+    card.appendChild(remove);
+
+    list.appendChild(card);
+
+  });
 
 }
 
-savedRecipes = JSON.parse(localStorage.getItem("recipeCatcher") || "[]");
+async function toggleFavorite(recipe) {
 
-showRecipes();
+  const { error } = await db.from("recipes")
 
+    .update({ is_favorite: !recipe.is_favorite })
+
+    .eq("id", recipe.id);
+
+  if (error) {
+
+    accountMessage.textContent = error.message;
+
+    return;
+
+  }
+
+  await loadRecipes();
+
+}
+
+async function deleteRecipe(id) {
+
+  if (!confirm("Delete this recipe?")) return;
+
+  const { error } = await db.from("recipes")
+
+    .delete().eq("id", id);
+
+  if (error) {
+
+    accountMessage.textContent = error.message;
+
+    return;
+
+  }
+
+  await loadRecipes();
+
+}
+
+document.getElementById("loginButton").onclick = signIn;
+
+document.getElementById("registerButton").onclick = register;
+
+document.getElementById("logoutButton").onclick = logout;
+
+window.saveRecipe = saveRecipe;
+
+window.showRecipes = renderRecipes;
+
+db.auth.getSession().then(({ data, error }) => {
+
+  if (error) {
+
+    accountMessage.textContent = error.message;
+
+    return;
+
+  }
+
+  if (data.session) {
+
+    currentUser = data.session.user;
+
+    startApp();
+
+  } else {
+
+    renderRecipes();
+
+  }
+
+});
+
+</script>
+
+</body>
+
+</html>
 </script>
 
 </body>
