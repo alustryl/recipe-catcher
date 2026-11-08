@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<title>Recipe Catcher</title>
+
+<style>
+
+body {
+
+  margin: 0;
+
+  padding: 20px;
+
+  background: #f8f5ed;
+
+  color: #34372f;
+
+  font-family: Arial, sans-serif;
+
+}
+
+header {
+
+  text-align: center;
+
+  padding: 20px;
+
+}
+
+h1 {
+
+  color: #65765b;
+
+  font-family: Georgia, serif;
+
+  font-size: 34px;
+
+  font-weight: normal;
+
+}
+
+.panel {
+
+  background: #fffefa;
+
+  border-radius: 16px;
+
+  padding: 20px;
+
+  margin: 15px auto;
+
+  max-width: 550px;
+
+}
+
+input, textarea, select {
+
+  width: 100%;
+
+  box-sizing: border-box;
+
+  padding: 13px;
+
+  margin: 8px 0;
+
+  border: 1px solid #deded3;
+
+  border-radius: 9px;
+
+  font-size: 16px;
+
+}
+
+textarea { min-height: 90px; }
+
+button {
+
+  padding: 13px 18px;
+
+  border: 0;
+
+  border-radius: 9px;
+
+  background: #65765b;
+
+  color: white;
+
+  font-size: 15px;
+
+  margin: 5px 0;
+
+}
+
+.recipe {
+
+  border-bottom: 1px solid #ddd;
+
+  padding: 14px 0;
+
+}
+
+</style>
+
+</head>
+
+<body>
+
+<header>
+
+  <h1>Recipe Catcher</h1>
+
+  <p>Good recipes are worth keeping.</p>
+
+</header>
+
+<div class="panel">
+
+  <h2>My Recipe Box</h2>
+
+  <input id="search" placeholder="Search my recipes">
+
+  <button onclick="showRecipes()">Search</button>
+
+</div>
+
+<div class="panel">
+
+  <h2>Add a Recipe</h2>
+
+  <input id="title" placeholder="Recipe name">
+
+  <select id="category">
+
+    <option>Main Dish</option>
+
+    <option>Side Dish</option>
+
+    <option>Appetizer</option>
+
+    <option>Soup</option>
+
+    <option>Salad</option>
+
+    <option>Dessert</option>
+
+    <option>Bread</option>
+
+    <option>Breakfast</option>
+
+    <option>Miscellaneous</option>
+
+  </select>
+
+  <input id="prep" placeholder="Prep time">
+
+  <input id="cook" placeholder="Cook time">
+
+  <input id="servings" placeholder="Servings">
+
+  <input id="temperature" placeholder="Oven temperature">
+
+  <textarea id="ingredients" placeholder="Ingredients (one per line)"></textarea>
+
+  <textarea id="instructions" placeholder="Instructions (one per line)"></textarea>
+
+  <input id="source" placeholder="Original recipe link">
+
+  <button onclick="saveRecipe()">Save Recipe</button>
+
+  <p id="message"></p>
+
+</div>
+
+<div class="panel">
+
+  <h2>Saved Recipes</h2>
+
+  <div id="recipes"></div>
+
+</div>
+
+<script>
+
+let savedRecipes = [];
+
+function saveRecipe() {
+
+  const title = document.getElementById("title").value.trim();
+
+  if (!title) {
+
+    document.getElementById("message").textContent =
+
+      "Please enter a recipe name.";
+
+    return;
+
+  }
+
+  const recipe = {
+
+    title,
+
+    category: document.getElementById("category").value,
+
+    prep: document.getElementById("prep").value,
+
+    cook: document.getElementById("cook").value,
+
+    servings: document.getElementById("servings").value,
+
+    temperature: document.getElementById("temperature").value,
+
+    ingredients: document.getElementById("ingredients").value,
+
+    instructions: document.getElementById("instructions").value,
+
+    source: document.getElementById("source").value,
+
+    favorite: false
+
+  };
+
+  savedRecipes.push(recipe);
+
+  localStorage.setItem("recipeCatcher", JSON.stringify(savedRecipes));
+
+  document.getElementById("message").textContent = "Recipe saved!";
+
+  document.querySelectorAll("input, textarea").forEach(el => el.value = "");
+
+  showRecipes();
+
+}
+
+function showRecipes() {
+
+  const list = document.getElementById("recipes");
+
+  const search = document.getElementById("search").value.toLowerCase();
+
+  list.innerHTML = "";
+
+  savedRecipes
+
+    .filter(r =>
+
+      (r.title + " " + r.ingredients).toLowerCase().includes(search)
+
+    )
+
+    .forEach((r, index) => {
+
+      const card = document.createElement("div");
+
+      card.className = "recipe";
+
+      const heading = document.createElement("h3");
+
+      heading.textContent = r.title;
+
+      card.appendChild(heading);
+
+      const details = document.createElement("p");
+
+      details.textContent = r.category +
+
+        " | Prep: " + r.prep +
+
+        " | Cook: " + r.cook;
+
+      card.appendChild(details);
+
+      const ingredients = document.createElement("p");
+
+      ingredients.textContent = "Ingredients:\n" + r.ingredients;
+
+      card.appendChild(ingredients);
+
+      const instructions = document.createElement("p");
+
+      instructions.textContent = "Instructions:\n" + r.instructions;
+
+      card.appendChild(instructions);
+
+      const favorite = document.createElement("button");
+
+      favorite.textContent = r.favorite ? "♥ Favorite" : "♡ Favorite";
+
+      favorite.onclick = () => {
+
+        r.favorite = !r.favorite;
+
+        localStorage.setItem("recipeCatcher", JSON.stringify(savedRecipes));
+
+        showRecipes();
+
+      };
+
+      card.appendChild(favorite);
+
+      const remove = document.createElement("button");
+
+      remove.textContent = "Delete";
+
+      remove.onclick = () => {
+
+        savedRecipes.splice(index, 1);
+
+        localStorage.setItem("recipeCatcher", JSON.stringify(savedRecipes));
+
+        showRecipes();
+
+      };
+
+      card.appendChild(remove);
+
+      list.appendChild(card);
+
+    });
+
+}
+
+savedRecipes = JSON.parse(localStorage.getItem("recipeCatcher") || "[]");
+
+showRecipes();
+
+</script>
+
+</body>
+
+</html>
